@@ -1,0 +1,101 @@
+/* ============================================================
+   LINE FOLLOWER — L298N + Arduino Uno + 2x IR sensors
+   ------------------------------------------------------------
+   Pins:
+     ENA = 5      ENB = 6          (PWM speed)
+     IN1 = 7      IN2 = 8          (Motor A direction)
+     IN3 = 9      IN4 = 10         (Motor B direction)
+     RS  = 11                      (Right IR sensor)
+     LS  = 12                      (Left  IR sensor)
+
+   Sensor logic: 0 = line detected, 1 = off line
+   (flip the comparisons in loop() if your sensors are inverted)
+   ============================================================ */
+
+#define IR_SENSOR_RIGHT  11
+#define IR_SENSOR_LEFT   12
+
+#define MOTOR_SPEED      175   // forward speed  (0-255)
+#define TURN_SPEED       120   // speed while pivoting
+#define SENSOR_GATE_MS   5     // read sensors every N ms
+
+// Motor pins
+int in[] = {7, 8, 9, 10};
+int en[] = {5, 6};
+int rs   = IR_SENSOR_RIGHT;
+int ls   = IR_SENSOR_LEFT;
+
+unsigned long lastRead = 0;
+
+void setup() {
+  // Timer0 left at default (~976 Hz PWM on pins 5,6)
+  // so millis() and delay() stay accurate.
+  Serial.begin(9600);
+  for (int i = 0; i < 4; i++) pinMode(in[i], OUTPUT);
+  for (int i = 0; i < 2; i++) pinMode(en[i], OUTPUT);
+
+  pinMode(rs, INPUT);
+  pinMode(ls, INPUT);
+
+  // start stopped
+  stopRobot();
+}
+
+void loop() {
+  // Read sensors at a fixed rate to avoid twitching at the line edge
+  if (millis() - lastRead < SENSOR_GATE_MS) return;
+  lastRead = millis();
+
+  int r = digitalRead(rs);
+  int l = digitalRead(ls);
+
+  if      (r == 0 && l == 0) forward();     // both on line
+  else if (r != 0 && l == 0) turnLeft();    // line drifted left
+  else if (r == 0 && l != 0) turnRight();   // line drifted right
+  else                       stopRobot();   // lost line
+
+}
+
+/* ---------------- Motion primitives ---------------- */
+
+void forward() {
+  Serial.print("Forward\n");         
+  analogWrite(en[0], MOTOR_SPEED);
+  analogWrite(en[1], MOTOR_SPEED);
+  digitalWrite(in[0], HIGH);
+  digitalWrite(in[1], LOW);
+  digitalWrite(in[2], HIGH);
+  digitalWrite(in[3], LOW);
+}
+
+void turnLeft() {
+  // Left wheel back, right wheel forward → pivot left
+  Serial.print("Left\n"); 
+  analogWrite(en[0], TURN_SPEED);
+  analogWrite(en[1], TURN_SPEED);
+  digitalWrite(in[0], LOW);
+  digitalWrite(in[1], HIGH);
+  digitalWrite(in[2], HIGH);
+  digitalWrite(in[3], LOW);
+}
+
+void turnRight() {
+  // Left wheel forward, right wheel back → pivot right
+  Serial.print("Right\n");
+  analogWrite(en[0], TURN_SPEED);
+  analogWrite(en[1], TURN_SPEED);
+  digitalWrite(in[0], HIGH);
+  digitalWrite(in[1], LOW);
+  digitalWrite(in[2], LOW);
+  digitalWrite(in[3], HIGH);
+}
+
+void stopRobot() {
+  Serial.print("Stop\n"); 
+  analogWrite(en[0], 0);
+  analogWrite(en[1], 0);
+  digitalWrite(in[0], LOW);
+  digitalWrite(in[1], LOW);
+  digitalWrite(in[2], LOW);
+  digitalWrite(in[3], LOW);
+}
